@@ -1,0 +1,40 @@
+================================================================================
+ONLINE SHOPPERS PURCHASING INTENTION PREDICTION
+ACADEMIC MACHINE LEARNING EXPERIMENT EVALUATION REPORT
+================================================================================
+
+1. MODEL COMPARISON ON TEST SET (STRATIFIED 20% HOLD-OUT):
+--------------------------------------------------------------------------------
+                         Model  Accuracy  Precision   Recall  F1-Score  ROC-AUC   PR-AUC
+         Random Forest (Tuned)  0.891848   0.633484 0.732984  0.679612 0.926466 0.722472
+             Gradient Boosting  0.903318   0.715976 0.633508  0.672222 0.935728 0.740442
+      Random Forest (Balanced)  0.870135   0.556131 0.842932  0.670135 0.931830 0.728153
+                 Random Forest  0.907415   0.765306 0.589005  0.665680 0.931504 0.744756
+                 Decision Tree  0.896354   0.718644 0.554974  0.626292 0.910362 0.659712
+Logistic Regression (Balanced)  0.842278   0.497577 0.806283  0.615385 0.911761 0.672926
+      Decision Tree (Balanced)  0.820975   0.462069 0.876963  0.605239 0.911855 0.677791
+           Logistic Regression  0.891028   0.776190 0.426702  0.550676 0.901792 0.663170
+
+2. SELECTED BEST MODEL:
+--------------------------------------------------------------------------------
+Best Performing Model: Random Forest (Tuned)
+Selection Criteria: Maximizing F1-score & ROC-AUC for positive purchase class (Revenue=True).
+
+3. DETAILED CLASSIFICATION REPORT FOR BEST MODEL:
+--------------------------------------------------------------------------------
+                 precision    recall  f1-score   support
+
+No Purchase (0)     0.9490    0.9213    0.9349      2059
+   Purchase (1)     0.6335    0.7330    0.6796       382
+
+       accuracy                         0.8918      2441
+      macro avg     0.7912    0.8272    0.8073      2441
+   weighted avg     0.8996    0.8918    0.8950      2441
+
+
+4. BUSINESS & E-COMMERCE INTERPRETATION:
+--------------------------------------------------------------------------------
+- High Precision: Minimizes false alarms when directing high-value conversion incentives.
+- High Recall: Captures genuine buying intent so cart abandonment interventions can trigger.
+- PageValues is consistently the single strongest predictive feature of purchasing session.
+================================================================================
