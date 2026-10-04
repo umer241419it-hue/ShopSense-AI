@@ -6,11 +6,11 @@ import {
   XCircle,
   Users,
   Layers,
-  ShoppingBag,
   Calendar,
   ShieldCheck,
   AlertCircle,
-  Activity,
+  Clock,
+  BookOpen,
 } from "lucide-react";
 import api from "../api";
 
@@ -24,34 +24,18 @@ const initial = {
   informationMinutes: 1,
   adminPages: 2,
   adminMinutes: 1,
-  shoppingStage: "cart_added",
   specialDay: "none",
 };
 
 const months = ["Feb", "Mar", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
- * Feature Engineering & Derivation Layer
+ * Production Model Payload Formatter
  *
- * Translates intuitive user-facing browsing observations into the exact mathematical
- * feature space expected by the trained Random Forest pipeline.
- *
- * 1. BounceRates:
- *    In Google Analytics, a bounce occurs when a visitor leaves after a single page view.
- *    For multi-page sessions, the average bounce rate of pages dilutes inversely with
- *    session depth (empirically validated against the 12,330 UCI records: r = 0.77).
- *
- * 2. ExitRates:
- *    Exit occurs only on the terminal pageview of a session (1/N), diluted by the
- *    baseline transition exit rate of intermediate pages (r = 0.816, MAE = 0.018).
- *
- * 3. PageValues:
- *    77.8% of all dataset sessions have PageValues = 0.0 (browsing only). Non-zero
- *    values capture shopping cart additions (median = 16.0) or checkout progress (p75 = 38.0).
- *
- * 4. Technical Client Categoricals:
- *    Anchored to empirical dataset modes (OperatingSystems: 2 [53.5%], Browser: 2 [64.6%],
- *    Region: 1 [38.8%], TrafficType: 2 [31.7%]) to prevent introducing arbitrary synthetic bias.
+ * Emits strictly the 10 real-time observable session features expected by the
+ * production Random Forest pipeline. Retrospective attribution metrics (PageValues,
+ * BounceRates, ExitRates) and synthetic category IDs (OperatingSystems, Browser,
+ * Region, TrafficType) are completely excluded from the production prediction path.
  */
 function toModelPayload(form) {
   const adminPages = Math.max(0, Number(form.adminPages) || 0);
@@ -60,30 +44,6 @@ function toModelPayload(form) {
   const infoMin = Math.max(0, Number(form.informationMinutes) || 0);
   const prodPages = Math.max(0, Number(form.productPages) || 0);
   const prodMin = Math.max(0, Number(form.productMinutes) || 0);
-
-  const totalPages = Math.max(1, adminPages + infoPages + prodPages);
-  const totalMinutes = adminMin + infoMin + prodMin;
-
-  // Derivation of BounceRates
-  let derivedBounceRate;
-  if (totalPages === 1 && totalMinutes <= 0.5) {
-    derivedBounceRate = 0.20; // Maximum GA bounce cap in dataset
-  } else if (totalPages === 1) {
-    derivedBounceRate = 0.10; // Single page dwell
-  } else {
-    derivedBounceRate = Math.min(0.20, 0.06 / totalPages); // Diluted bounce rate
-  }
-
-  // Derivation of ExitRates
-  const derivedExitRate = Math.min(0.20, 0.016 + 0.174 / totalPages);
-
-  // Derivation of PageValues from user-observed shopping stage
-  const pageValueMap = {
-    browsing_only: 0.0,
-    cart_added: 16.0,
-    checkout_started: 38.0,
-  };
-  const derivedPageValue = pageValueMap[form.shoppingStage] ?? 0.0;
 
   const specialDayMap = {
     none: 0.0,
@@ -100,16 +60,8 @@ function toModelPayload(form) {
     Informational_Duration: infoMin * 60,
     ProductRelated: prodPages,
     ProductRelated_Duration: prodMin * 60,
-    BounceRates: Number(derivedBounceRate.toFixed(4)),
-    ExitRates: Number(derivedExitRate.toFixed(4)),
-    PageValues: derivedPageValue,
     SpecialDay: specialDayMap[form.specialDay] ?? 0.0,
     Month: form.month,
-    // Empirical modal baseline for anonymized nominal integer features
-    OperatingSystems: 2,
-    Browser: 2,
-    Region: 1,
-    TrafficType: 2,
     VisitorType: form.visitorType,
     Weekend: Boolean(form.weekend),
   };
@@ -144,34 +96,15 @@ export function PredictionPage() {
     setErr("");
   }
 
-  // Computed summary for UI feedback
-  const totalPages = Math.max(
-    1,
+  const totalPages =
     (Number(form.adminPages) || 0) +
-      (Number(form.informationPages) || 0) +
-      (Number(form.productPages) || 0)
-  );
+    (Number(form.informationPages) || 0) +
+    (Number(form.productPages) || 0);
+
   const totalMinutes =
     (Number(form.adminMinutes) || 0) +
     (Number(form.informationMinutes) || 0) +
     (Number(form.productMinutes) || 0);
-
-  const bouncePreview =
-    totalPages === 1 && totalMinutes <= 0.5
-      ? "20.0% (Single-page bounce)"
-      : totalPages === 1
-      ? "10.0% (Single-page dwell)"
-      : `${(Math.min(0.20, 0.06 / totalPages) * 100).toFixed(1)}% (Diluted over ${totalPages} pgs)`;
-
-  const exitPreview = `${(
-    Math.min(0.20, 0.016 + 0.174 / totalPages) * 100
-  ).toFixed(1)}% (Estimated)`;
-
-  const stagePreviewMap = {
-    browsing_only: "0.0 pts (Standard browsing)",
-    cart_added: "16.0 pts (Active cart interest)",
-    checkout_started: "38.0 pts (High checkout intent)",
-  };
 
   const intentClass =
     r?.intent_level === "High" || r?.intent_level === "Very High"
@@ -186,7 +119,10 @@ export function PredictionPage() {
         <div>
           <span className="eyebrow">AI INFERENCE ENGINE</span>
           <h1>Predict purchase intention</h1>
-          <p>Describe the visitor's browsing activity to estimate real-time purchase intent with ShopSense AI.</p>
+          <p>
+            Enter real-time browsing observations to evaluate live purchase propensity using the
+            ShopSense AI production model.
+          </p>
         </div>
         <button className="secondary" type="button" onClick={reset}>
           <RotateCcw size={15} /> Reset Form
@@ -194,7 +130,7 @@ export function PredictionPage() {
       </div>
 
       <div className="prediction-layout">
-        {/* Left Column: Structured Form */}
+        {/* Left Column: Behavioral Input Form */}
         <form className="prediction-form-panel" onSubmit={submit}>
           {/* Section 1: Visitor & Session */}
           <div className="form-card-section">
@@ -204,7 +140,7 @@ export function PredictionPage() {
               </div>
               <h3>Visitor &amp; Session</h3>
             </div>
-            <p className="section-desc">Visitor relationship with the store and session timing.</p>
+            <p className="section-desc">Store relationship and temporal session timing.</p>
 
             <div className="grid-3-col">
               <div className="form-field">
@@ -269,7 +205,7 @@ export function PredictionPage() {
             <div className="activity-card">
               <div className="activity-card-header">
                 <span className="activity-card-title">Product Catalog &amp; Items</span>
-                <span className="activity-card-subtitle">Browsing products and collections</span>
+                <span className="activity-card-subtitle">Browsing products and item collections</span>
               </div>
               <div className="grid-2-col">
                 <div className="form-field">
@@ -288,7 +224,7 @@ export function PredictionPage() {
                     />
                     <span className="input-addon-suffix">pages</span>
                   </div>
-                  <span className="field-hint">Opened product pages</span>
+                  <span className="field-hint">Opened product detail pages</span>
                 </div>
 
                 <div className="form-field">
@@ -307,7 +243,7 @@ export function PredictionPage() {
                     />
                     <span className="input-addon-suffix">min</span>
                   </div>
-                  <span className="field-hint">Dwell time on catalog</span>
+                  <span className="field-hint">Dwell time on product catalog</span>
                 </div>
               </div>
             </div>
@@ -316,7 +252,7 @@ export function PredictionPage() {
             <div className="activity-card">
               <div className="activity-card-header">
                 <span className="activity-card-title">Information &amp; Support</span>
-                <span className="activity-card-subtitle">Policies, delivery info, and guides</span>
+                <span className="activity-card-subtitle">Policies, delivery info, and customer guides</span>
               </div>
               <div className="grid-2-col">
                 <div className="form-field">
@@ -335,7 +271,7 @@ export function PredictionPage() {
                     />
                     <span className="input-addon-suffix">pages</span>
                   </div>
-                  <span className="field-hint">FAQ &amp; help pages</span>
+                  <span className="field-hint">FAQ &amp; service pages</span>
                 </div>
 
                 <div className="form-field">
@@ -354,7 +290,7 @@ export function PredictionPage() {
                     />
                     <span className="input-addon-suffix">min</span>
                   </div>
-                  <span className="field-hint">Dwell time on help</span>
+                  <span className="field-hint">Dwell time on help pages</span>
                 </div>
               </div>
             </div>
@@ -363,7 +299,7 @@ export function PredictionPage() {
             <div className="activity-card">
               <div className="activity-card-header">
                 <span className="activity-card-title">Administrative &amp; Account</span>
-                <span className="activity-card-subtitle">Customer account and login pages</span>
+                <span className="activity-card-subtitle">Customer account, profile, and login pages</span>
               </div>
               <div className="grid-2-col">
                 <div className="form-field">
@@ -401,71 +337,13 @@ export function PredictionPage() {
                     />
                     <span className="input-addon-suffix">min</span>
                   </div>
-                  <span className="field-hint">Dwell time on admin</span>
+                  <span className="field-hint">Dwell time on account views</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Shopping Intent & Funnel Progress */}
-          <div className="form-card-section">
-            <div className="section-header">
-              <div className="section-icon-badge">
-                <ShoppingBag size={17} />
-              </div>
-              <h3>Shopping Intent &amp; Funnel Progress</h3>
-            </div>
-            <p className="section-desc">How far the visitor progressed toward completing a purchase.</p>
-
-            <div className="form-field">
-              <label htmlFor="shoppingStage">Cart &amp; Purchase Stage</label>
-              <select
-                id="shoppingStage"
-                className="form-control"
-                value={form.shoppingStage}
-                onChange={(e) => set("shoppingStage", e.target.value)}
-              >
-                <option value="browsing_only">
-                  Casual Browsing Only — Viewed items, but did not add to cart
-                </option>
-                <option value="cart_added">
-                  Active Consideration — Added item to cart / reviewed shopping basket
-                </option>
-                <option value="checkout_started">
-                  High Purchase Intent — Initiated checkout or order details review
-                </option>
-              </select>
-              <span className="field-hint">
-                Captures high-value conversion intent without requiring technical analytics metrics
-              </span>
-            </div>
-
-            {/* Derived Analytics Indicators */}
-            <div className="derived-indicators-card">
-              <span className="derived-indicators-title">
-                <Activity size={13} />
-                Derived Analytics Signals (Calculated Automatically)
-              </span>
-              <div className="derived-indicators-grid">
-                <div className="derived-indicator-item">
-                  <span className="derived-indicator-label">Bounce Rate Model</span>
-                  <span className="derived-indicator-value">{bouncePreview}</span>
-                </div>
-                <div className="derived-indicator-item">
-                  <span className="derived-indicator-label">Exit Rate Model</span>
-                  <span className="derived-indicator-value">{exitPreview}</span>
-                </div>
-                <div className="derived-indicator-item">
-                  <span className="derived-indicator-label">Goal Value Weight</span>
-                  <span className="derived-indicator-value">
-                    {stagePreviewMap[form.shoppingStage]}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Special Shopping Context */}
+          {/* Section 3: Special Shopping Context */}
           <div className="form-card-section">
             <div className="section-header">
               <div className="section-icon-badge">
@@ -473,7 +351,7 @@ export function PredictionPage() {
               </div>
               <h3>Special Shopping Context</h3>
             </div>
-            <p className="section-desc">Proximity of the session to major shopping holidays or seasonal sales.</p>
+            <p className="section-desc">Proximity of the session to major shopping holidays or sales events.</p>
 
             <div className="form-field">
               <label htmlFor="specialDay">Proximity to Special Day</label>
@@ -493,13 +371,35 @@ export function PredictionPage() {
             </div>
           </div>
 
-          {/* Automated System Note */}
+          {/* Real-Time Session Telemetry Summary */}
+          <div className="derived-indicators-card">
+            <span className="derived-indicators-title">
+              <Clock size={13} />
+              Session Telemetry Summary
+            </span>
+            <div className="derived-indicators-grid">
+              <div className="derived-indicator-item">
+                <span className="derived-indicator-label">Total Navigation Depth</span>
+                <span className="derived-indicator-value">{totalPages} pages</span>
+              </div>
+              <div className="derived-indicator-item">
+                <span className="derived-indicator-label">Total Session Duration</span>
+                <span className="derived-indicator-value">{totalMinutes} min</span>
+              </div>
+              <div className="derived-indicator-item">
+                <span className="derived-indicator-label">Observable Features</span>
+                <span className="derived-indicator-value">10 Real-Time Signals</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Academic Transparency Note */}
           <div className="technical-callout">
             <ShieldCheck size={18} />
             <span>
-              <strong>Automated Client &amp; Channel Baseline:</strong> Technical client attributes (device,
-              browser, region, and traffic source) are anchored to empirical dataset modal baselines (Standard
-              Web Browser / Primary Direct Channel / Region 1) to eliminate arbitrary synthetic bias.
+              <strong>Real-Time Observable Inference:</strong> This prediction is evaluated exclusively on real-time
+              behavioral signals (browsing dwell time, navigation depth, and calendar seasonality). Retrospective
+              attribution metrics (PageValues, BounceRates, ExitRates) and anonymized codes are deliberately excluded.
             </span>
           </div>
 
@@ -516,13 +416,13 @@ export function PredictionPage() {
           </button>
         </form>
 
-        {/* Right Column: Structured Result Panel */}
+        {/* Right Column: Prediction Result Panel */}
         <aside className="prediction-result-panel">
           <div className="result-panel-header">
             <h3>Prediction Outcome</h3>
             <span className="live-indicator">
               <span className="pulse-dot" />
-              Live Model
+              Production Model
             </span>
           </div>
 
@@ -532,7 +432,9 @@ export function PredictionPage() {
                 <Sparkles size={28} />
               </div>
               <h4>Ready for Assessment</h4>
-              <p>Configure the visitor browsing attributes on the left and submit to generate real-time AI purchase propensity analytics.</p>
+              <p>
+                Configure the visitor browsing attributes on the left and submit to generate real-time purchase propensity analytics.
+              </p>
 
               <div className="empty-feature-list">
                 <div className="empty-feature-item">
@@ -545,11 +447,11 @@ export function PredictionPage() {
                 </div>
                 <div className="empty-feature-item">
                   <CheckCircle2 size={16} />
-                  <span>Intent level categorization (High / Medium / Low)</span>
+                  <span>Intent level categorization (High / Moderate / Low)</span>
                 </div>
                 <div className="empty-feature-item">
                   <CheckCircle2 size={16} />
-                  <span>Model inference confidence rating</span>
+                  <span>Real-time observable session signals only</span>
                 </div>
               </div>
             </div>
@@ -575,13 +477,13 @@ export function PredictionPage() {
                 <div className="result-metric-card">
                   <span className="result-metric-title">Purchase Probability</span>
                   <strong className="result-metric-val">{(r.purchase_probability * 100).toFixed(1)}%</strong>
-                  <span className="result-metric-sub">Likelihood to order</span>
+                  <span className="result-metric-sub">Likelihood to complete order</span>
                 </div>
 
                 <div className="result-metric-card">
                   <span className="result-metric-title">Model Confidence</span>
                   <strong className="result-metric-val">{(r.confidence * 100).toFixed(1)}%</strong>
-                  <span className="result-metric-sub">Inference certainty</span>
+                  <span className="result-metric-sub">Classifier certainty</span>
                 </div>
               </div>
 
@@ -616,7 +518,7 @@ export function PredictionPage() {
               </div>
 
               <div className="result-explanation-note">
-                Statistical propensity estimate produced by the trained ShopSense classifier based on visitor dwell patterns and site interactions.
+                Statistical propensity estimate produced by the ShopSense production model based solely on real-time navigation depth and dwell time.
               </div>
 
               <button
@@ -634,5 +536,3 @@ export function PredictionPage() {
     </section>
   );
 }
-
-

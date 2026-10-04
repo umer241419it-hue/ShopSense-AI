@@ -117,7 +117,10 @@ class TestShopSenseAPIs(unittest.TestCase):
         r_model = requests.get(f"{BACKEND_URL}/model/metrics", headers=headers, timeout=5)
         self.assertEqual(r_model.status_code, 200)
         model_info = r_model.json()
-        self.assertEqual(model_info.get("bestModel"), "Random Forest (Tuned)")
+        self.assertTrue(
+            "Random Forest" in str(model_info.get("bestModel", ""))
+            or model_info.get("academicBestModel") == "Random Forest (Tuned)"
+        )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,11 @@ ShopSense AI combines an academic machine-learning experiment with a complete we
 - **scikit-learn** training and inference pipeline
 - UCI Online Shoppers dataset, preprocessing, EDA, evaluation, notebook and reports
 
-## Architecture
+## Dual-Model Architecture
+
+The project maintains two model contexts:
+1. **Academic Benchmark Model (`models/best_model.joblib`)**: Uses the complete historical UCI 17-feature dataset (including retrospective Google Analytics attribution features like `PageValues`, `BounceRates`, `ExitRates` and anonymized technical codes) for reproducible dataset benchmarking, viva defense, and research reporting.
+2. **Production Inference Model (`models/production_model.joblib`)**: Trained exclusively on features that are **genuinely observable in real-time** during an active browsing session.
 
 ```
 React / Vite :5173
@@ -22,24 +26,30 @@ Express API :5000  -----> MongoDB :27017
       v
 FastAPI ML Service :8000
       |
-      v
-models/best_model.joblib
+      +---> models/production_model.joblib (Active Real-Time Inference: 10 Observable Features)
       |
-      v
-UCI Online Shoppers Purchasing Intention dataset
+      +---> models/best_model.joblib       (Academic Research Benchmark: 17 UCI Features)
 ```
 
-MongoDB stores application users and prediction history. The UCI CSV remains the reproducible ML training source.
+### Technical Note on Dual-Model Architecture
+> "The project maintains two model contexts. The academic benchmark model uses the complete historical UCI feature set for reproducible dataset benchmarking. The production inference model uses only features that are genuinely observable during an active browsing session. This separation prevents retrospective attribution variables and anonymized dataset identifiers from being fabricated as user inputs."
+
+*Note on Predictive Performance*: The production model is expected to have lower predictive performance ($F_1 \approx 0.38-0.40$ vs. $F_1 \approx 0.68$) because it deliberately removes retrospective/derived attribution features (especially `PageValues`, which is calculated post-session in Google Analytics).
+
+### Observable Production Features (10 Total):
+- **Numerical (7)**: `Administrative`, `Administrative_Duration`, `Informational`, `Informational_Duration`, `ProductRelated`, `ProductRelated_Duration`, `SpecialDay`
+- **Categorical (3)**: `Month`, `VisitorType`, `Weekend`
+- **Excluded**: `PageValues`, `BounceRates`, `ExitRates`, `OperatingSystems`, `Browser`, `Region`, `TrafficType`
 
 ## Main flow
 
 1. User registers or signs in.
-2. React sends an authenticated request to Express.
-3. Express validates the request and forwards the session to FastAPI.
-4. FastAPI validates the feature ranges and runs the persisted scikit-learn pipeline.
+2. React sends an authenticated request containing strictly real-time observable session fields to Express.
+3. Express validates the 10 production features and forwards the payload to FastAPI.
+4. FastAPI validates the schema and runs the persisted `production_model.joblib` pipeline.
 5. Express stores the input and prediction in MongoDB.
 6. React displays the result and prediction history.
-7. The Model page reads the stored experimental metrics.
+7. The Model page displays transparency reports for both the production model and academic benchmark.
 
 ## Local setup
 
