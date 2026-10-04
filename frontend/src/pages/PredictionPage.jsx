@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { RotateCcw, Sparkles, CheckCircle2, Info } from "lucide-react";
+import {
+  RotateCcw,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  Users,
+  Layers,
+  Activity,
+  Calendar,
+  ShieldCheck,
+  AlertCircle,
+} from "lucide-react";
 import api from "../api";
 
 const initial = {
@@ -66,9 +77,10 @@ export function PredictionPage() {
     setErr("");
     try {
       const payload = toModelPayload(form);
-      setR((await api.post("/predictions", payload)).data);
+      const res = await api.post("/predictions", payload);
+      setR(res.data);
     } catch (e) {
-      setErr(e.response?.data?.message || "Prediction failed");
+      setErr(e.response?.data?.message || "Prediction request failed");
     } finally {
       setBusy(false);
     }
@@ -80,199 +92,476 @@ export function PredictionPage() {
     setErr("");
   }
 
+  const intentClass =
+    r?.intent_level === "High"
+      ? "high"
+      : r?.intent_level === "Medium"
+      ? "medium"
+      : "low";
+
   return (
-    <section className="page">
-      <div className="page-title">
+    <section className="page prediction-container">
+      <div className="prediction-page-header">
         <div>
-          <span className="eyebrow">PURCHASE INTENTION</span>
+          <span className="eyebrow">AI INFERENCE ENGINE</span>
           <h1>Predict purchase intention</h1>
-          <p>Describe the visitor's browsing session and let ShopSense AI estimate purchase intent.</p>
+          <p>Configure visitor browsing attributes to assess real-time purchase propensity with ShopSense AI.</p>
         </div>
         <button className="secondary" type="button" onClick={reset}>
-          <RotateCcw size={16} /> Reset
+          <RotateCcw size={15} /> Reset Form
         </button>
       </div>
 
-      <div className="grid-2">
-        <form className="panel friendly-form" onSubmit={submit}>
-          <div className="form-section">
-            <h3>Visitor</h3>
-            <p className="section-help">Start with a few details about this visit.</p>
+      <div className="prediction-layout">
+        {/* Left Column: Structured Form */}
+        <form className="prediction-form-panel" onSubmit={submit}>
+          {/* Section 1: Visitor & Session */}
+          <div className="form-card-section">
+            <div className="section-header">
+              <div className="section-icon-badge">
+                <Users size={17} />
+              </div>
+              <h3>Visitor &amp; Session</h3>
+            </div>
+            <p className="section-desc">Visitor relationship with the store and session timing.</p>
 
-            <div className="friendly-grid">
-              <label>
-                <span>Visitor type</span>
-                <select value={form.visitorType} onChange={(e) => set("visitorType", e.target.value)}>
+            <div className="grid-3-col">
+              <div className="form-field">
+                <label htmlFor="visitorType">Visitor Type</label>
+                <select
+                  id="visitorType"
+                  className="form-control"
+                  value={form.visitorType}
+                  onChange={(e) => set("visitorType", e.target.value)}
+                >
                   <option value="Returning_Visitor">Returning visitor</option>
                   <option value="New_Visitor">New visitor</option>
-                  <option value="Other">Other</option>
+                  <option value="Other">Other visitor</option>
                 </select>
-              </label>
+                <span className="field-hint">Customer relationship</span>
+              </div>
 
-              <label>
-                <span>Visit month</span>
-                <select value={form.month} onChange={(e) => set("month", e.target.value)}>
-                  {months.map((month) => <option key={month}>{month}</option>)}
+              <div className="form-field">
+                <label htmlFor="month">Session Month</label>
+                <select
+                  id="month"
+                  className="form-control"
+                  value={form.month}
+                  onChange={(e) => set("month", e.target.value)}
+                >
+                  {months.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
                 </select>
-              </label>
+                <span className="field-hint">Calendar seasonality</span>
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="weekend">Weekend Visit?</label>
+                <select
+                  id="weekend"
+                  className="form-control"
+                  value={String(form.weekend)}
+                  onChange={(e) => set("weekend", e.target.value === "true")}
+                >
+                  <option value="false">No (Weekday)</option>
+                  <option value="true">Yes (Weekend)</option>
+                </select>
+                <span className="field-hint">Day of the week</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Browsing Activity */}
+          <div className="form-card-section">
+            <div className="section-header">
+              <div className="section-icon-badge">
+                <Layers size={17} />
+              </div>
+              <h3>Browsing Activity</h3>
+            </div>
+            <p className="section-desc">Page views and dwell time recorded across key store areas.</p>
+
+            {/* Product Pages */}
+            <div className="activity-card">
+              <div className="activity-card-header">
+                <span className="activity-card-title">Product Catalog &amp; Items</span>
+                <span className="activity-card-subtitle">Browsing products and collections</span>
+              </div>
+              <div className="grid-2-col">
+                <div className="form-field">
+                  <label htmlFor="productPages">Product Pages Viewed</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="productPages"
+                      type="number"
+                      min="0"
+                      max="500"
+                      step="1"
+                      className="form-control"
+                      value={form.productPages}
+                      onChange={(e) => set("productPages", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">pages</span>
+                  </div>
+                  <span className="field-hint">Opened product pages</span>
+                </div>
+
+                <div className="form-field">
+                  <label htmlFor="productMinutes">Time on Product Pages</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="productMinutes"
+                      type="number"
+                      min="0"
+                      max="833"
+                      step="1"
+                      className="form-control"
+                      value={form.productMinutes}
+                      onChange={(e) => set("productMinutes", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">min</span>
+                  </div>
+                  <span className="field-hint">Dwell time on catalog</span>
+                </div>
+              </div>
             </div>
 
-            <label className="toggle-field">
-              <span>Was this visit on a weekend?</span>
-              <select value={String(form.weekend)} onChange={(e) => set("weekend", e.target.value === "true")}>
-                <option value="false">No</option>
-                <option value="true">Yes</option>
+            {/* Information Pages */}
+            <div className="activity-card">
+              <div className="activity-card-header">
+                <span className="activity-card-title">Information &amp; Support</span>
+                <span className="activity-card-subtitle">Policies, delivery info, and guides</span>
+              </div>
+              <div className="grid-2-col">
+                <div className="form-field">
+                  <label htmlFor="informationPages">Info Pages Viewed</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="informationPages"
+                      type="number"
+                      min="0"
+                      max="30"
+                      step="1"
+                      className="form-control"
+                      value={form.informationPages}
+                      onChange={(e) => set("informationPages", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">pages</span>
+                  </div>
+                  <span className="field-hint">FAQ &amp; help pages</span>
+                </div>
+
+                <div className="form-field">
+                  <label htmlFor="informationMinutes">Time on Info Pages</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="informationMinutes"
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="1"
+                      className="form-control"
+                      value={form.informationMinutes}
+                      onChange={(e) => set("informationMinutes", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">min</span>
+                  </div>
+                  <span className="field-hint">Dwell time on help</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Administrative Pages */}
+            <div className="activity-card">
+              <div className="activity-card-header">
+                <span className="activity-card-title">Administrative &amp; Account</span>
+                <span className="activity-card-subtitle">Customer account and login pages</span>
+              </div>
+              <div className="grid-2-col">
+                <div className="form-field">
+                  <label htmlFor="adminPages">Admin Pages Viewed</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="adminPages"
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="1"
+                      className="form-control"
+                      value={form.adminPages}
+                      onChange={(e) => set("adminPages", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">pages</span>
+                  </div>
+                  <span className="field-hint">Account &amp; settings views</span>
+                </div>
+
+                <div className="form-field">
+                  <label htmlFor="adminMinutes">Time on Admin Pages</label>
+                  <div className="input-addon-group">
+                    <input
+                      id="adminMinutes"
+                      type="number"
+                      min="0"
+                      max="84"
+                      step="1"
+                      className="form-control"
+                      value={form.adminMinutes}
+                      onChange={(e) => set("adminMinutes", e.target.value)}
+                      required
+                    />
+                    <span className="input-addon-suffix">min</span>
+                  </div>
+                  <span className="field-hint">Dwell time on admin</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Engagement */}
+          <div className="form-card-section">
+            <div className="section-header">
+              <div className="section-icon-badge">
+                <Activity size={17} />
+              </div>
+              <h3>Engagement</h3>
+            </div>
+            <p className="section-desc">Key metrics capturing session bounce propensity and page value.</p>
+
+            <div className="grid-3-col">
+              <div className="form-field">
+                <label htmlFor="bounceRate">Bounce Rate</label>
+                <div className="input-addon-group">
+                  <input
+                    id="bounceRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    className="form-control"
+                    value={form.bounceRate}
+                    onChange={(e) => set("bounceRate", e.target.value)}
+                    required
+                  />
+                  <span className="input-addon-suffix">%</span>
+                </div>
+                <span className="field-hint">Single-page exits</span>
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="exitRate">Exit Rate</label>
+                <div className="input-addon-group">
+                  <input
+                    id="exitRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    className="form-control"
+                    value={form.exitRate}
+                    onChange={(e) => set("exitRate", e.target.value)}
+                    required
+                  />
+                  <span className="input-addon-suffix">%</span>
+                </div>
+                <span className="field-hint">Session-ending views</span>
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="pageValue">Page Value</label>
+                <div className="input-addon-group">
+                  <input
+                    id="pageValue"
+                    type="number"
+                    min="0"
+                    max="400"
+                    step="0.1"
+                    className="form-control"
+                    value={form.pageValue}
+                    onChange={(e) => set("pageValue", e.target.value)}
+                    required
+                  />
+                  <span className="input-addon-suffix">pts</span>
+                </div>
+                <span className="field-hint">Optional (0 if unknown)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Special Shopping Context */}
+          <div className="form-card-section">
+            <div className="section-header">
+              <div className="section-icon-badge">
+                <Calendar size={17} />
+              </div>
+              <h3>Special Shopping Context</h3>
+            </div>
+            <p className="section-desc">Proximity of the session to major shopping holidays or seasonal sales.</p>
+
+            <div className="form-field">
+              <label htmlFor="specialDay">Proximity to Special Day</label>
+              <select
+                id="specialDay"
+                className="form-control"
+                value={form.specialDay}
+                onChange={(e) => set("specialDay", e.target.value)}
+              >
+                <option value="none">Not close (Standard browsing day)</option>
+                <option value="slight">Slightly close (Within 4–5 days of event)</option>
+                <option value="moderate">Moderately close (Within 2–3 days of event)</option>
+                <option value="close">Very close (Eve of holiday / promotion)</option>
+                <option value="veryClose">Holiday peak (On the special shopping day)</option>
               </select>
-            </label>
-          </div>
-
-          <div className="form-section">
-            <h3>Browsing activity</h3>
-            <p className="section-help">Tell us how much the visitor explored the website.</p>
-
-            <div className="friendly-grid">
-              <label>
-                <span>Product pages viewed</span>
-                <input type="number" min="0" max="500" step="1" value={form.productPages} onChange={(e) => set("productPages", e.target.value)} />
-                <small>Number of product pages opened.</small>
-              </label>
-
-              <label>
-                <span>Time spent on product pages</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="833" step="1" value={form.productMinutes} onChange={(e) => set("productMinutes", e.target.value)} />
-                  <em>minutes</em>
-                </div>
-              </label>
-
-              <label>
-                <span>Information pages viewed</span>
-                <input type="number" min="0" max="30" step="1" value={form.informationPages} onChange={(e) => set("informationPages", e.target.value)} />
-                <small>Help, information or guide pages.</small>
-              </label>
-
-              <label>
-                <span>Time on information pages</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="50" step="1" value={form.informationMinutes} onChange={(e) => set("informationMinutes", e.target.value)} />
-                  <em>minutes</em>
-                </div>
-              </label>
-
-              <label>
-                <span>Account / administrative pages viewed</span>
-                <input type="number" min="0" max="50" step="1" value={form.adminPages} onChange={(e) => set("adminPages", e.target.value)} />
-                <small>Login, account or other administrative pages.</small>
-              </label>
-
-              <label>
-                <span>Time on account / administrative pages</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="84" step="1" value={form.adminMinutes} onChange={(e) => set("adminMinutes", e.target.value)} />
-                  <em>minutes</em>
-                </div>
-              </label>
+              <span className="field-hint">Models shopping holiday surges and promotional buying peaks</span>
             </div>
           </div>
 
-          <div className="form-section">
-            <h3>Engagement</h3>
-            <p className="section-help">These describe how deeply the visitor interacted with the site.</p>
+          {/* Automated System Note */}
+          <div className="technical-callout">
+            <ShieldCheck size={18} />
+            <span>
+              <strong>Automated Parameters:</strong> Technical attributes (browser, operating system, region, and
+              traffic channel) are pre-configured automatically to standard production baselines.
+            </span>
+          </div>
 
-            <div className="friendly-grid">
-              <label>
-                <span>Bounce rate</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="100" step="1" value={form.bounceRate} onChange={(e) => set("bounceRate", e.target.value)} />
-                  <em>%</em>
-                </div>
-                <small>Approximate share of visits that leave after one page.</small>
-              </label>
-
-              <label>
-                <span>Exit rate</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="100" step="1" value={form.exitRate} onChange={(e) => set("exitRate", e.target.value)} />
-                  <em>%</em>
-                </div>
-                <small>Approximate share of page views that end the session.</small>
-              </label>
-
-              <label>
-                <span>Purchase-related page value</span>
-                <div className="input-suffix">
-                  <input type="number" min="0" max="400" step="0.1" value={form.pageValue} onChange={(e) => set("pageValue", e.target.value)} />
-                  <em>value</em>
-                </div>
-                <small>Optional analytics value associated with pages visited. Use 0 if unknown.</small>
-              </label>
-
-              <label>
-                <span>How close is the visit to a special shopping day?</span>
-                <select value={form.specialDay} onChange={(e) => set("specialDay", e.target.value)}>
-                  <option value="none">Not close</option>
-                  <option value="slight">A little close</option>
-                  <option value="moderate">Moderately close</option>
-                  <option value="close">Very close</option>
-                  <option value="veryClose">On the special day</option>
-                </select>
-              </label>
+          {err && (
+            <div className="error-alert">
+              <AlertCircle size={18} />
+              <span>{err}</span>
             </div>
-          </div>
+          )}
 
-          <div className="technical-note">
-            <Info size={17} />
-            <span>Technical session details are handled automatically. You do not need to know any dataset codes or machine identifiers.</span>
-          </div>
-
-          {err && <div className="error full">{err}</div>}
-
-          <button className="primary full" disabled={busy}>
-            <Sparkles size={17} /> {busy ? "Scoring..." : "Predict purchase intention"}
+          <button className="btn-predict" type="submit" disabled={busy}>
+            <Sparkles size={18} />
+            <span>{busy ? "Analyzing Session..." : "Predict Purchase Intention"}</span>
           </button>
         </form>
 
-        <div className="panel result-panel">
+        {/* Right Column: Structured Result Panel */}
+        <aside className="prediction-result-panel">
+          <div className="result-panel-header">
+            <h3>Prediction Outcome</h3>
+            <span className="live-indicator">
+              <span className="pulse-dot" />
+              Live Model
+            </span>
+          </div>
+
           {!r ? (
-            <div className="empty">
-              <Sparkles size={34} />
-              <h3>Prediction result</h3>
-              <p>Complete the session details and run the prediction to see the estimated purchase intent.</p>
+            <div className="empty-result-state">
+              <div className="empty-icon-wrapper">
+                <Sparkles size={28} />
+              </div>
+              <h4>Ready for Assessment</h4>
+              <p>Configure the visitor session parameters on the left and submit to generate real-time AI purchase propensity analytics.</p>
+
+              <div className="empty-feature-list">
+                <div className="empty-feature-item">
+                  <CheckCircle2 size={16} />
+                  <span>Binary Purchase vs. Non-Purchase classification</span>
+                </div>
+                <div className="empty-feature-item">
+                  <CheckCircle2 size={16} />
+                  <span>Calibrated purchase probability percentage</span>
+                </div>
+                <div className="empty-feature-item">
+                  <CheckCircle2 size={16} />
+                  <span>Intent level categorization (High / Medium / Low)</span>
+                </div>
+                <div className="empty-feature-item">
+                  <CheckCircle2 size={16} />
+                  <span>Model inference confidence rating</span>
+                </div>
+              </div>
             </div>
           ) : (
-            <>
-              <div className={r.prediction === 1 ? "result success" : "result neutral"}>
-                <CheckCircle2 size={30} />
-                <div>
-                  <span>Predicted outcome</span>
-                  <strong>{r.prediction_label}</strong>
+            <div>
+              {/* Decision Hero Card */}
+              <div className={`result-hero-card ${r.prediction === 1 ? "success" : "neutral"}`}>
+                <div className="result-hero-icon">
+                  {r.prediction === 1 ? <CheckCircle2 size={26} /> : <XCircle size={26} />}
+                </div>
+                <div className="result-hero-meta">
+                  <span className="result-hero-label">
+                    {r.prediction === 1 ? "Positive Intent" : "Standard Session"}
+                  </span>
+                  <strong className="result-hero-title">
+                    {r.prediction_label || (r.prediction === 1 ? "Purchase" : "No Purchase")}
+                  </strong>
                 </div>
               </div>
 
-              <div className="prob-grid">
-                <div>
-                  <span>Purchase probability</span>
-                  <strong>{(r.purchase_probability * 100).toFixed(1)}%</strong>
+              {/* Metrics Grid */}
+              <div className="result-metrics-grid">
+                <div className="result-metric-card">
+                  <span className="result-metric-title">Purchase Probability</span>
+                  <strong className="result-metric-val">{(r.purchase_probability * 100).toFixed(1)}%</strong>
+                  <span className="result-metric-sub">Likelihood to order</span>
                 </div>
-                <div>
-                  <span>Confidence</span>
-                  <strong>{(r.confidence * 100).toFixed(1)}%</strong>
+
+                <div className="result-metric-card">
+                  <span className="result-metric-title">Model Confidence</span>
+                  <strong className="result-metric-val">{(r.confidence * 100).toFixed(1)}%</strong>
+                  <span className="result-metric-sub">Inference certainty</span>
                 </div>
               </div>
 
-              <div className="intent">
-                <span>Intent level</span>
-                <strong>{r.intent_level}</strong>
-                <div className="bar"><i style={{ width: `${r.purchase_probability * 100}%` }} /></div>
+              {/* Intent Level Card */}
+              <div className="intent-card">
+                <div className="intent-header">
+                  <span className="intent-header-label">Assessed Intent Level</span>
+                  <span className={`intent-badge ${intentClass}`}>
+                    {r.intent_level || (r.prediction === 1 ? "High Intent" : "Low Intent")}
+                  </span>
+                </div>
+
+                <div className="probability-bar-track">
+                  <div
+                    className={`probability-bar-fill ${intentClass}`}
+                    style={{ width: `${Math.min(100, Math.max(0, r.purchase_probability * 100))}%` }}
+                  />
+                </div>
+
+                <div className="prob-split-labels">
+                  <span>Purchase: {(r.purchase_probability * 100).toFixed(1)}%</span>
+                  <span>
+                    No Purchase:{" "}
+                    {(
+                      (r.no_purchase_probability != null
+                        ? r.no_purchase_probability
+                        : 1 - r.purchase_probability) * 100
+                    ).toFixed(1)}
+                    %
+                  </span>
+                </div>
               </div>
 
-              <p className="result-note">
-                This is a model estimate based on the session information provided. It is not a guarantee that the visitor will purchase.
-              </p>
-            </>
+              <div className="result-explanation-note">
+                Statistical propensity estimate produced by the trained ShopSense classifier based on visitor dwell patterns and site interactions.
+              </div>
+
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={reset}
+              >
+                <RotateCcw size={15} /> Reset &amp; Test Another
+              </button>
+            </div>
           )}
-        </div>
+        </aside>
       </div>
     </section>
   );
 }
+
