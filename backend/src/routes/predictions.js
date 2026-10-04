@@ -12,17 +12,104 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ message: "Prediction payload must be a JSON object." });
     }
 
+    const {
+      Administrative,
+      Administrative_Duration,
+      Informational,
+      Informational_Duration,
+      ProductRelated,
+      ProductRelated_Duration,
+      SpecialDay,
+      Month,
+      VisitorType,
+      Weekend,
+    } = req.body;
+
+    // Strict validation of production numeric attributes
+    const numericFields = [
+      { name: "Administrative", val: Administrative },
+      { name: "Administrative_Duration", val: Administrative_Duration },
+      { name: "Informational", val: Informational },
+      { name: "Informational_Duration", val: Informational_Duration },
+      { name: "ProductRelated", val: ProductRelated },
+      { name: "ProductRelated_Duration", val: ProductRelated_Duration },
+      { name: "SpecialDay", val: SpecialDay },
+    ];
+
+    for (const f of numericFields) {
+      if (f.val !== undefined) {
+        const num = Number(f.val);
+        if (!Number.isFinite(num) || num < 0) {
+          return res.status(400).json({
+            message: "One or more session attributes are invalid.",
+            detail: `Field '${f.name}' must be a non-negative number.`,
+          });
+        }
+      }
+    }
+
+    if (SpecialDay !== undefined) {
+      const sd = Number(SpecialDay);
+      if (!Number.isFinite(sd) || sd < 0 || sd > 1) {
+        return res.status(400).json({
+          message: "One or more session attributes are invalid.",
+          detail: "Field 'SpecialDay' must be between 0.0 and 1.0.",
+        });
+      }
+    }
+
+    const VALID_MONTHS = new Set([
+      "Jan", "Feb", "Mar", "Apr", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ]);
+    if (Month !== undefined && (typeof Month !== "string" || !VALID_MONTHS.has(Month.trim()))) {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'Month' must be one of: Jan, Feb, Mar, Apr, May, June, Jul, Aug, Sep, Oct, Nov, Dec.",
+      });
+    }
+
+    const VALID_VISITOR_TYPES = new Set([
+      "Returning_Visitor", "New_Visitor", "Other"
+    ]);
+    if (VisitorType !== undefined && (typeof VisitorType !== "string" || !VALID_VISITOR_TYPES.has(VisitorType.trim()))) {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'VisitorType' must be one of: Returning_Visitor, New_Visitor, Other.",
+      });
+    }
+
+    if (Weekend !== undefined && typeof Weekend !== "boolean") {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'Weekend' must be a boolean (true or false).",
+      });
+    }
+
+    // Construct strictly the 10 real-time observable production features
+    const productionPayload = {
+      Administrative: Math.max(0, Number(Administrative) || 0),
+      Administrative_Duration: Math.max(0, Number(Administrative_Duration) || 0),
+      Informational: Math.max(0, Number(Informational) || 0),
+      Informational_Duration: Math.max(0, Number(Informational_Duration) || 0),
+      ProductRelated: Math.max(0, Number(ProductRelated) || 0),
+      ProductRelated_Duration: Math.max(0, Number(ProductRelated_Duration) || 0),
+      SpecialDay: Math.min(1, Math.max(0, Number(SpecialDay) || 0)),
+      Month: typeof Month === "string" && Month.trim() ? Month.trim() : "May",
+      VisitorType: typeof VisitorType === "string" && VisitorType.trim() ? VisitorType.trim() : "Returning_Visitor",
+      Weekend: Boolean(Weekend),
+    };
+
     const mlUrl = process.env.ML_SERVICE_URL;
     if (!mlUrl) {
       return res.status(503).json({ message: "ML service is not configured." });
     }
 
-    const response = await axios.post(`${mlUrl}/predict`, req.body, { timeout: 15000 });
+    const response = await axios.post(`${mlUrl}/predict`, productionPayload, { timeout: 15000 });
     const result = response.data;
 
     const saved = await Prediction.create({
       user: req.userId,
-      input: req.body,
+      input: productionPayload,
       prediction: result.prediction,
       predictionLabel: result.prediction_label,
       purchaseProbability: result.purchase_probability,

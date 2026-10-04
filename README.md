@@ -11,7 +11,11 @@ ShopSense AI combines an academic machine-learning experiment with a complete we
 - **scikit-learn** training and inference pipeline
 - UCI Online Shoppers dataset, preprocessing, EDA, evaluation, notebook and reports
 
-## Architecture
+## Dual-Model Architecture
+
+The project maintains two model contexts:
+1. **Academic Benchmark Model (`models/best_model.joblib`)**: Uses the complete historical UCI 17-feature dataset (including retrospective Google Analytics attribution features like `PageValues`, `BounceRates`, `ExitRates` and anonymized technical codes) for reproducible dataset benchmarking, viva defense, and research reporting.
+2. **Production Inference Model (`models/production_model.joblib`)**: Trained exclusively on features that are **genuinely observable in real-time** during an active browsing session.
 
 ```
 React / Vite :5173
@@ -22,24 +26,30 @@ Express API :5000  -----> MongoDB :27017
       v
 FastAPI ML Service :8000
       |
-      v
-models/best_model.joblib
+      +---> models/production_model.joblib (Active Real-Time Inference: 10 Observable Features)
       |
-      v
-UCI Online Shoppers Purchasing Intention dataset
+      +---> models/best_model.joblib       (Academic Research Benchmark: 17 UCI Features)
 ```
 
-MongoDB stores application users and prediction history. The UCI CSV remains the reproducible ML training source.
+### Technical Note on Dual-Model Architecture
+> "The project maintains two model contexts. The academic benchmark model uses the complete historical UCI feature set for reproducible dataset benchmarking. The production inference model uses only features that are genuinely observable during an active browsing session. This separation prevents retrospective attribution variables and anonymized dataset identifiers from being fabricated as user inputs."
+
+*Note on Predictive Performance*: The production model is expected to have lower predictive performance ($F_1 \approx 0.38-0.40$ vs. $F_1 \approx 0.68$) because it deliberately removes retrospective/derived attribution features (especially `PageValues`, which is calculated post-session in Google Analytics).
+
+### Observable Production Features (10 Total):
+- **Numerical (7)**: `Administrative`, `Administrative_Duration`, `Informational`, `Informational_Duration`, `ProductRelated`, `ProductRelated_Duration`, `SpecialDay`
+- **Categorical (3)**: `Month`, `VisitorType`, `Weekend`
+- **Excluded**: `PageValues`, `BounceRates`, `ExitRates`, `OperatingSystems`, `Browser`, `Region`, `TrafficType`
 
 ## Main flow
 
 1. User registers or signs in.
-2. React sends an authenticated request to Express.
-3. Express validates the request and forwards the session to FastAPI.
-4. FastAPI validates the feature ranges and runs the persisted scikit-learn pipeline.
+2. React sends an authenticated request containing strictly real-time observable session fields to Express.
+3. Express validates the 10 production features and forwards the payload to FastAPI.
+4. FastAPI validates the schema and runs the persisted `production_model.joblib` pipeline.
 5. Express stores the input and prediction in MongoDB.
 6. React displays the result and prediction history.
-7. The Model page reads the stored experimental metrics.
+7. The Model page displays transparency reports for both the production model and academic benchmark.
 
 ## Local setup
 
@@ -85,18 +95,43 @@ Open: `http://localhost:5173`
 
 If the API is not local, set `VITE_API_URL` in `frontend/.env`.
 
-## ML experiment
+## ML experiment & Model Training
 
+### Academic Benchmark Model (Historical 17 UCI Features)
 Install the research dependencies and run:
-
 ```bash
 pip install -r requirements.txt
 python run_project.py
 ```
+This runs data acquisition, validation, EDA, feature engineering, model comparison, class-imbalance analysis, hyperparameter tuning, evaluation and inference checks for the academic benchmark artifact (`models/best_model.joblib`).
 
-This runs data acquisition, validation, EDA, feature engineering, model comparison, class-imbalance analysis, hyperparameter tuning, evaluation and inference checks.
+### Production Inference Model (10 Real-Time Observable Features)
+To retrain and evaluate the production model pipeline:
+```bash
+python src/train_production.py
+```
+This trains candidate classifiers (Logistic Regression, Decision Tree, Random Forest, Gradient Boosting) using only observable browsing metrics, performs hyperparameter tuning, and saves the calibrated inference pipeline to `models/production_model.joblib` and metrics to `reports/production_model_comparison.csv`.
 
-The repository also contains an executed research notebook and academic reports.
+## Offline-Capable Architecture
+ShopSense AI is entirely self-contained and operates in fully air-gapped / offline environments:
+- **Zero Cloud AI Dependencies**: All inference is executed locally using serialized scikit-learn pipelines; no third-party LLM or cloud inference APIs are queried.
+- **Local Asset Bundling**: Fonts and CSS icons are bundled locally with Vite; no Google Fonts or external CDNs are requested at runtime.
+- **Local Persistence & Service Mesh**: MongoDB, Node.js Express, and FastAPI run entirely on local network loops (`127.0.0.1`).
+
+## Testing & Quality Assurance
+
+Run the complete automated test suite (pipeline validation and API integration tests):
+```bash
+python -m pytest -q
+```
+The test suite validates:
+- UCI dataset schema integrity and preprocessing
+- Academic benchmark model loading and 17-feature inference
+- Production model loading and strict 10-feature inference
+- Backend and ML service health
+- Authentication, JWT verification, and unauthorized request rejection
+- Input validation (negative numbers, invalid months, non-boolean values)
+- End-to-end prediction persistence and analytics aggregation
 
 ## Security and reliability
 
@@ -122,8 +157,8 @@ frontend/       React application
 ml-service/     FastAPI inference API
 src/            ML training/preprocessing/evaluation code
 data/           raw and processed dataset artifacts
-models/         persisted trained pipeline
+models/         persisted trained pipelines (production_model.joblib & best_model.joblib)
 notebooks/      research notebook
-reports/        metrics, figures, write-up and viva questions
-tests/          ML pipeline tests
+reports/        metrics, figures, evaluation reports, and viva questions
+tests/          dual-model ML pipeline and API integration tests
 ```

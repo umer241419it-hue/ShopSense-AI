@@ -1,6 +1,7 @@
 """
 Automated Test Suite for Online Shopper Purchasing Intention Pipeline.
-Validates data integrity, preprocessing, model loading, inference, and app compatibility.
+Validates data integrity, preprocessing, dual-model loading (production & academic),
+inference, and app compatibility.
 Uses Python's built-in unittest so it can run anywhere without extra dependencies.
 """
 
@@ -16,11 +17,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.data_loader import load_raw_data, validate_dataset, EXPECTED_COLUMNS, EXPECTED_ROWS
 from src.preprocessing import prepare_data, engineer_features
-from src.predict import ShopperPurchasePredictor
+from src.predict import (
+    ShopperPurchasePredictor,
+    PRODUCTION_MODEL_PATH,
+    ACADEMIC_MODEL_PATH,
+    PRODUCTION_NUMERICAL_FEATURES,
+    PRODUCTION_CATEGORICAL_FEATURES,
+)
 
 
 class TestShopperPipeline(unittest.TestCase):
-    """Test suite covering the complete ML lifecycle."""
+    """Test suite covering the complete dual-model ML lifecycle."""
 
     def test_01_data_loader(self):
         """Verify raw dataset exists, has expected shape and columns."""
@@ -36,12 +43,12 @@ class TestShopperPipeline(unittest.TestCase):
         """Verify preprocessing produces clean stratified train/test sets and engineered features."""
         df = load_raw_data()
         prep = prepare_data(df, test_size=0.2, random_state=42, drop_duplicates=True, use_feature_engineering=True)
-        
+
         X_train = prep["X_train"]
         X_test = prep["X_test"]
         y_train = prep["y_train"]
         y_test = prep["y_test"]
-        
+
         self.assertEqual(len(X_train) + len(X_test), len(df.drop_duplicates()))
         self.assertIn("TotalPageViews", X_train.columns)
         self.assertIn("TotalDuration", X_train.columns)
@@ -51,14 +58,13 @@ class TestShopperPipeline(unittest.TestCase):
         self.assertTrue(set(np.unique(y_train)).issubset({0, 1}))
         self.assertTrue(set(np.unique(y_test)).issubset({0, 1}))
 
-    def test_03_model_loading_and_inference(self):
-        """Verify trained model pipeline artifact loads and generates valid predictions."""
-        model_path = PROJECT_ROOT / "models" / "best_model.joblib"
-        self.assertTrue(model_path.exists(), f"Model file must exist at {model_path}")
-        
-        predictor = ShopperPurchasePredictor(model_path)
-        
-        # Test high intent session
+    def test_03_academic_benchmark_model(self):
+        """Verify historical academic benchmark model loads offline and predicts on 17 UCI features."""
+        self.assertTrue(ACADEMIC_MODEL_PATH.exists(), f"Academic model must exist at {ACADEMIC_MODEL_PATH}")
+
+        academic_predictor = ShopperPurchasePredictor(ACADEMIC_MODEL_PATH)
+        self.assertFalse(academic_predictor.is_production, "best_model.joblib should be identified as academic benchmark")
+
         high_intent = {
             "Administrative": 3, "Administrative_Duration": 85.0,
             "Informational": 1, "Informational_Duration": 42.0,
@@ -68,28 +74,80 @@ class TestShopperPipeline(unittest.TestCase):
             "Browser": 2, "Region": 1, "TrafficType": 2,
             "VisitorType": "Returning_Visitor", "Weekend": False
         }
-        res = predictor.predict(high_intent)
+        res = academic_predictor.predict(high_intent)
         self.assertIn("prediction", res)
         self.assertIn("purchase_probability", res)
         self.assertTrue(0.0 <= res["purchase_probability"] <= 1.0)
-        self.assertTrue(0.0 <= res["no_purchase_probability"] <= 1.0)
         self.assertAlmostEqual(res["purchase_probability"] + res["no_purchase_probability"], 1.0, places=4)
-        self.assertEqual(res["prediction"], 1, "High-intent customer should predict Purchase (1)")
-        
-        # Test low intent bounce session
-        low_intent = {
-            "Administrative": 0, "Administrative_Duration": 0.0,
-            "Informational": 0, "Informational_Duration": 0.0,
-            "ProductRelated": 1, "ProductRelated_Duration": 0.0,
-            "BounceRates": 0.20, "ExitRates": 0.20, "PageValues": 0.0,
-            "SpecialDay": 0.0, "Month": "Feb", "OperatingSystems": 1,
-            "Browser": 1, "Region": 1, "TrafficType": 1,
-            "VisitorType": "Returning_Visitor", "Weekend": False
-        }
-        res_low = predictor.predict(low_intent)
-        self.assertEqual(res_low["prediction"], 0, "Quick bounce session should predict No Purchase (0)")
+        self.assertEqual(res["prediction"], 1, "Academic benchmark should predict Purchase for high-intent session")
 
-    def test_04_streamlit_app_import(self):
+    def test_04_production_model_loading_and_inference(self):
+        """
+        Verify production model loads offline, strictly accepts 10 real-time observable features,
+        and requires NO PageValues, BounceRates, ExitRates, or anonymized client IDs.
+        """
+        self.assertTrue(PRODUCTION_MODEL_PATH.exists(), f"Production model must exist at {PRODUCTION_MODEL_PATH}")
+
+        prod_predictor = ShopperPurchasePredictor(PRODUCTION_MODEL_PATH)
+        self.assertTrue(prod_predictor.is_production, "production_model.joblib must be identified as production model")
+
+        # Verify production schema contains exactly the 10 intended features
+        expected_production_features = {
+            "Administrative", "Administrative_Duration",
+            "Informational", "Informational_Duration",
+            "ProductRelated", "ProductRelated_Duration",
+            "SpecialDay", "Month", "VisitorType", "Weekend"
+        }
+        self.assertEqual(
+            set(PRODUCTION_NUMERICAL_FEATURES + PRODUCTION_CATEGORICAL_FEATURES),
+            expected_production_features,
+            "Production schema must contain exactly the 10 real-time observable features."
+        )
+
+        # Strict production session with ZERO retrospective features or anonymized codes
+        prod_high_intent = {
+            "Administrative": 3,
+            "Administrative_Duration": 85.0,
+            "Informational": 1,
+            "Informational_Duration": 42.0,
+            "ProductRelated": 28,
+            "ProductRelated_Duration": 1150.0,
+            "SpecialDay": 0.0,
+            "Month": "Nov",
+            "VisitorType": "Returning_Visitor",
+            "Weekend": False,
+        }
+
+        # Assert no retrospective or anonymized attributes are in the session dict
+        for forbidden in ["PageValues", "BounceRates", "ExitRates", "OperatingSystems", "Browser", "Region", "TrafficType"]:
+            self.assertNotIn(forbidden, prod_high_intent)
+
+        res_high = prod_predictor.predict(prod_high_intent)
+        self.assertIn("prediction", res_high)
+        self.assertIn("purchase_probability", res_high)
+        self.assertIn("intent_level", res_high)
+        self.assertTrue(0.0 <= res_high["purchase_probability"] <= 1.0)
+        self.assertAlmostEqual(res_high["purchase_probability"] + res_high["no_purchase_probability"], 1.0, places=4)
+        self.assertEqual(res_high["prediction"], 1, "High activity session should predict Purchase")
+
+        # Low intent session
+        prod_low_intent = {
+            "Administrative": 0,
+            "Administrative_Duration": 0.0,
+            "Informational": 0,
+            "Informational_Duration": 0.0,
+            "ProductRelated": 1,
+            "ProductRelated_Duration": 0.0,
+            "SpecialDay": 0.0,
+            "Month": "Feb",
+            "VisitorType": "Returning_Visitor",
+            "Weekend": False,
+        }
+        res_low = prod_predictor.predict(prod_low_intent)
+        self.assertEqual(res_low["prediction"], 0, "Low intent session should predict No Purchase")
+        self.assertLess(res_low["purchase_probability"], 0.25)
+
+    def test_05_streamlit_app_import(self):
         """Verify Streamlit app module can be imported cleanly without errors."""
         import app
         self.assertTrue(hasattr(app, "load_predictor"))

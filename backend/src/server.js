@@ -1,4 +1,12 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __serverDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+if (!process.env.JWT_SECRET) {
+  dotenv.config({ path: path.resolve(__serverDir, "../.env") });
+}
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
