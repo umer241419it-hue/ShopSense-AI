@@ -50,12 +50,39 @@ router.post("/", async (req, res, next) => {
 
     if (SpecialDay !== undefined) {
       const sd = Number(SpecialDay);
-      if (sd < 0 || sd > 1) {
+      if (!Number.isFinite(sd) || sd < 0 || sd > 1) {
         return res.status(400).json({
           message: "One or more session attributes are invalid.",
           detail: "Field 'SpecialDay' must be between 0.0 and 1.0.",
         });
       }
+    }
+
+    const VALID_MONTHS = new Set([
+      "Jan", "Feb", "Mar", "Apr", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ]);
+    if (Month !== undefined && (typeof Month !== "string" || !VALID_MONTHS.has(Month.trim()))) {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'Month' must be one of: Jan, Feb, Mar, Apr, May, June, Jul, Aug, Sep, Oct, Nov, Dec.",
+      });
+    }
+
+    const VALID_VISITOR_TYPES = new Set([
+      "Returning_Visitor", "New_Visitor", "Other"
+    ]);
+    if (VisitorType !== undefined && (typeof VisitorType !== "string" || !VALID_VISITOR_TYPES.has(VisitorType.trim()))) {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'VisitorType' must be one of: Returning_Visitor, New_Visitor, Other.",
+      });
+    }
+
+    if (Weekend !== undefined && typeof Weekend !== "boolean") {
+      return res.status(400).json({
+        message: "One or more session attributes are invalid.",
+        detail: "Field 'Weekend' must be a boolean (true or false).",
+      });
     }
 
     // Construct strictly the 10 real-time observable production features

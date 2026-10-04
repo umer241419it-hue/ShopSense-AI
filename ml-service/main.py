@@ -19,6 +19,12 @@ app = FastAPI(title="ShopSense AI ML Service", version="2.0.0")
 predictor = ShopperPurchasePredictor(PROD_MODEL_PATH)
 
 
+from typing import Literal
+
+VALID_MONTHS = Literal["Jan", "Feb", "Mar", "Apr", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+VALID_VISITOR_TYPES = Literal["Returning_Visitor", "New_Visitor", "Other"]
+
+
 class ShopperSession(BaseModel):
     """
     Production real-time observable session schema (10 features).
@@ -32,8 +38,8 @@ class ShopperSession(BaseModel):
     ProductRelated: float = Field(0, ge=0)
     ProductRelated_Duration: float = Field(0, ge=0)
     SpecialDay: float = Field(0, ge=0, le=1)
-    Month: str = "May"
-    VisitorType: str = "Returning_Visitor"
+    Month: VALID_MONTHS = "May"
+    VisitorType: VALID_VISITOR_TYPES = "Returning_Visitor"
     Weekend: bool = False
 
 

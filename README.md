@@ -95,18 +95,43 @@ Open: `http://localhost:5173`
 
 If the API is not local, set `VITE_API_URL` in `frontend/.env`.
 
-## ML experiment
+## ML experiment & Model Training
 
+### Academic Benchmark Model (Historical 17 UCI Features)
 Install the research dependencies and run:
-
 ```bash
 pip install -r requirements.txt
 python run_project.py
 ```
+This runs data acquisition, validation, EDA, feature engineering, model comparison, class-imbalance analysis, hyperparameter tuning, evaluation and inference checks for the academic benchmark artifact (`models/best_model.joblib`).
 
-This runs data acquisition, validation, EDA, feature engineering, model comparison, class-imbalance analysis, hyperparameter tuning, evaluation and inference checks.
+### Production Inference Model (10 Real-Time Observable Features)
+To retrain and evaluate the production model pipeline:
+```bash
+python src/train_production.py
+```
+This trains candidate classifiers (Logistic Regression, Decision Tree, Random Forest, Gradient Boosting) using only observable browsing metrics, performs hyperparameter tuning, and saves the calibrated inference pipeline to `models/production_model.joblib` and metrics to `reports/production_model_comparison.csv`.
 
-The repository also contains an executed research notebook and academic reports.
+## Offline-Capable Architecture
+ShopSense AI is entirely self-contained and operates in fully air-gapped / offline environments:
+- **Zero Cloud AI Dependencies**: All inference is executed locally using serialized scikit-learn pipelines; no third-party LLM or cloud inference APIs are queried.
+- **Local Asset Bundling**: Fonts and CSS icons are bundled locally with Vite; no Google Fonts or external CDNs are requested at runtime.
+- **Local Persistence & Service Mesh**: MongoDB, Node.js Express, and FastAPI run entirely on local network loops (`127.0.0.1`).
+
+## Testing & Quality Assurance
+
+Run the complete automated test suite (pipeline validation and API integration tests):
+```bash
+python -m pytest -q
+```
+The test suite validates:
+- UCI dataset schema integrity and preprocessing
+- Academic benchmark model loading and 17-feature inference
+- Production model loading and strict 10-feature inference
+- Backend and ML service health
+- Authentication, JWT verification, and unauthorized request rejection
+- Input validation (negative numbers, invalid months, non-boolean values)
+- End-to-end prediction persistence and analytics aggregation
 
 ## Security and reliability
 
@@ -132,8 +157,8 @@ frontend/       React application
 ml-service/     FastAPI inference API
 src/            ML training/preprocessing/evaluation code
 data/           raw and processed dataset artifacts
-models/         persisted trained pipeline
+models/         persisted trained pipelines (production_model.joblib & best_model.joblib)
 notebooks/      research notebook
-reports/        metrics, figures, write-up and viva questions
-tests/          ML pipeline tests
+reports/        metrics, figures, evaluation reports, and viva questions
+tests/          dual-model ML pipeline and API integration tests
 ```
