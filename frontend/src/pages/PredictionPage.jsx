@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RotateCcw,
   Sparkles,
@@ -28,6 +28,22 @@ const initial = {
 };
 
 const months = ["Feb", "Mar", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const STORAGE_KEY = "shopsense_prediction_state";
+
+function getStoredPredictionState() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+  } catch {
+    // Gracefully handle malformed or disabled sessionStorage
+  }
+  return null;
+}
 
 /**
  * Production Model Payload Formatter
@@ -68,10 +84,33 @@ function toModelPayload(form) {
 }
 
 export function PredictionPage() {
-  const [form, setForm] = useState(initial);
-  const [r, setR] = useState(null);
+  const [form, setForm] = useState(() => {
+    const stored = getStoredPredictionState();
+    return stored?.form && typeof stored.form === "object"
+      ? { ...initial, ...stored.form }
+      : initial;
+  });
+
+  const [r, setR] = useState(() => {
+    const stored = getStoredPredictionState();
+    return stored?.r && typeof stored.r === "object" ? stored.r : null;
+  });
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Persist form state and latest prediction to sessionStorage across navigation
+  useEffect(() => {
+    try {
+      if (r !== null || JSON.stringify(form) !== JSON.stringify(initial)) {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ form, r }));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // Ignore quota or security restrictions in private browsing
+    }
+  }, [form, r]);
 
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
@@ -94,6 +133,11 @@ export function PredictionPage() {
     setForm(initial);
     setR(null);
     setErr("");
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
   }
 
   const totalPages =
