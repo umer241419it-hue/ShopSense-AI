@@ -585,6 +585,51 @@ select.form-control {
   margin-bottom: 14px;
 }
 
+.derived-indicators-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.derived-indicators-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475467;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.derived-indicators-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.derived-indicator-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.derived-indicator-label {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.derived-indicator-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f766e;
+}
+
 @media (max-width: 1080px) {
   .prediction-layout {
     grid-template-columns: 1fr;
@@ -599,6 +644,9 @@ select.form-control {
     grid-template-columns: 1fr;
   }
   .grid-2-col {
+    grid-template-columns: 1fr;
+  }
+  .derived-indicators-grid {
     grid-template-columns: 1fr;
   }
   .prediction-page-header {
